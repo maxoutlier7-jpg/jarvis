@@ -1,1 +1,1 @@
-# Core do Jarvis
+"""Componentes centrais do Jarvis."""
