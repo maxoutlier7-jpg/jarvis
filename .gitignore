@@ -1,8 +1,12 @@
-# Ambiente
-.env
-venv/
+# Ambiente virtual
 .venv/
+venv/
 env/
+
+# Variáveis e segredos
+.env
+.env.*
+!.env.example
 
 # Python
 __pycache__/
@@ -14,6 +18,11 @@ build/
 dist/
 *.egg-info/
 
+# Testes e cobertura
+.pytest_cache/
+.coverage
+htmlcov/
+
 # IDE
 .idea/
 .vscode/
@@ -24,7 +33,7 @@ dist/
 .DS_Store
 Thumbs.db
 
-# Logs e dados
+# Logs e dados locais
 *.log
 data/
 memory/
