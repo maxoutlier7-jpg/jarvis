@@ -84,9 +84,9 @@ jarvis/
 
 ## APIs utilizadas
 
-O Jarvis usa o SDK `google-genai` para o Gemini e o SDK `groq` para o Groq. A integração Gemini foi atualizada para o SDK atual recomendado pelo Google. citeturn0search2turn0search5
+O Jarvis usa o SDK `google-genai` para o Gemini e o SDK `groq` para o Groq.
 
-A integração Groq usa Chat Completions, conforme a API Python oficial. citeturn0search0turn0search10
+A integração Gemini usa o SDK atual do Google, enquanto a integração Groq usa o cliente Python oficial com Chat Completions.
 
 ## Próximos passos
 
