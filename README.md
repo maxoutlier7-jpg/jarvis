@@ -1,87 +1,97 @@
 # Jarvis
 
-Assistente de IA pessoal **super inteligente**.
+Assistente de IA pessoal em Python, com suporte a **Google Gemini** e **Groq**, memória de conversa e sistema de plugins extensível.
 
-Suporta **Google Gemini** e **Groq** (ambos gratuitos).  
-Sistema de plugins extensível + memória de conversa.
+## Requisitos
 
-## Como usar
+- Python 3.10+
+- Uma chave de API do Gemini ou Groq
 
-### 1. Clone o repositório
+## Instalação
+
 ```bash
 git clone https://github.com/maxoutlier7-jpg/jarvis.git
 cd jarvis
+python -m venv .venv
 ```
 
-### 2. Crie o ambiente virtual
-```bash
-python -m venv venv
+### Windows
 
-# Windows
-venv\Scripts\activate
-
-# Linux / Mac
-source venv/bin/activate
+```powershell
+.venv\Scripts\activate
 ```
 
-### 3. Instale as dependências
+### Linux / macOS
+
 ```bash
+source .venv/bin/activate
+```
+
+Instale as dependências:
+
+```bash
+python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-### 4. Configure a API Key
-Copie o arquivo de exemplo:
-```bash
-cp .env.example .env
-```
+## Configuração
 
-Abra o arquivo `.env` e coloque sua chave:
+Copie `.env.example` para `.env` e configure pelo menos uma chave:
 
 ```env
-# Escolha uma das duas (ou as duas)
-GEMINI_API_KEY=sua_chave_aqui
-GROQ_API_KEY=sua_chave_aqui
-
-# Qual provedor usar por padrão: gemini ou groq
+GEMINI_API_KEY=sua_chave
+GROQ_API_KEY=sua_chave
 DEFAULT_PROVIDER=gemini
 ```
 
-#### Onde pegar as chaves gratuitas:
-- **Gemini (recomendado)**: https://aistudio.google.com/apikey
-- **Groq (muito rápido)**: https://console.groq.com/keys
+Chaves:
 
-### 5. Rode o Jarvis
+- Gemini: https://aistudio.google.com/apikey
+- Groq: https://console.groq.com/keys
+
+O `.env` não deve ser enviado ao GitHub.
+
+## Executar
+
 ```bash
 python main.py
 ```
 
 ## Comandos
 
-- Digite normalmente para conversar
 - `/clear` — limpa a memória da conversa
-- `/provider gemini` ou `/provider groq` — troca o modelo
-- `/help` — mostra ajuda
-- `/exit` ou `/quit` — sai
+- `/provider gemini` — troca para Gemini
+- `/provider groq` — troca para Groq
+- `/status` — mostra o estado atual
+- `/help` — mostra os comandos
+- `/exit` ou `/quit` — encerra o Jarvis
 
-## Estrutura do projeto
+## Estrutura
 
-```
+```text
 jarvis/
-├── main.py              # Ponto de entrada
+├── main.py
 ├── requirements.txt
 ├── .env.example
 ├── core/
-│   ├── llm.py           # Integração com Gemini e Groq
-│   ├── memory.py        # Memória da conversa
-│   └── config.py        # Configurações
+│   ├── __init__.py
+│   ├── config.py
+│   ├── memory.py
+│   └── llm.py
 └── plugins/
-    └── __init__.py      # Sistema de plugins (pronto para expansão)
+    └── __init__.py
 ```
 
-## Próximos passos possíveis
-- Voz (Speech-to-Text + Text-to-Speech)
-- Mais plugins (abrir sites, clima, controle do PC, etc.)
-- Interface web
-- Memória de longo prazo
+## APIs utilizadas
 
-Feito com ❤️ para ser o seu Jarvis.
+O Jarvis usa o SDK `google-genai` para o Gemini e o SDK `groq` para o Groq. A integração Gemini foi atualizada para o SDK atual recomendado pelo Google. citeturn0search2turn0search5
+
+A integração Groq usa Chat Completions, conforme a API Python oficial. citeturn0search0turn0search10
+
+## Próximos passos
+
+- Voz (Speech-to-Text e Text-to-Speech)
+- Plugins de clima, navegador e automação
+- Memória persistente
+- Interface web
+- Ferramentas e chamadas de função
