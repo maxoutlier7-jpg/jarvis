@@ -1,22 +1,25 @@
-"""
-Sistema de plugins do Jarvis.
+"""Sistema simples de plugins do Jarvis."""
 
-Aqui você pode adicionar novas habilidades (abrir sites, clima, 
-controle do computador, etc).
+from typing import Callable, Dict, Optional
 
-Exemplo de como criar um plugin no futuro:
+Plugin = Callable[..., str]
+PLUGINS: Dict[str, Plugin] = {}
 
-def plugin_clima(cidade: str) -> str:
-    # lógica aqui
-    return f"O clima em {cidade} está..."
-"""
 
-# Lista de plugins registrados (por enquanto vazio, pronto para expansão)
-PLUGINS = {}
+def register(name: str, func: Plugin) -> Plugin:
+    """Registra e devolve um plugin."""
+    key = name.strip().lower()
+    if not key:
+        raise ValueError("O nome do plugin não pode ser vazio")
+    PLUGINS[key] = func
+    return func
 
-def register(name: str, func):
-    """Registra um novo plugin."""
-    PLUGINS[name] = func
 
-def get_plugin(name: str):
-    return PLUGINS.get(name)
+def get_plugin(name: str) -> Optional[Plugin]:
+    """Obtém um plugin pelo nome."""
+    return PLUGINS.get(name.strip().lower())
+
+
+def list_plugins() -> list[str]:
+    """Retorna os nomes dos plugins registrados."""
+    return sorted(PLUGINS)
