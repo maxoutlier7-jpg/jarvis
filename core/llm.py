@@ -131,9 +131,7 @@ class LLM:
         for provider in order:
             try:
                 if provider == "gemini":
-                    response = self._with_retry(
-                        lambda: self._chat_gemini(user_message, history), "Gemini"
-                    )
+                    response = self._chat_gemini(user_message, history)
                 else:
                     response = self._with_retry(
                         lambda: self._chat_groq(user_message, history), "Groq"
@@ -156,20 +154,36 @@ class LLM:
 
         from google.genai import types
 
-        chat = self._gemini_client.chats.create(
-            model=config.GEMINI_MODEL,
-            history=self._gemini_history(history),
-            config=types.GenerateContentConfig(
-                system_instruction=config.SYSTEM_PROMPT,
-                temperature=0.7,
-            ),
-        )
+        last_error = None
 
-        response = chat.send_message(message=user_message)
-        text = getattr(response, "text", None)
-        if not text:
-            raise RuntimeError("Gemini retornou uma resposta vazia")
-        return text
+        for model in config.GEMINI_MODELS:
+            try:
+                chat = self._gemini_client.chats.create(
+                    model=model,
+                    history=self._gemini_history(history),
+                    config=types.GenerateContentConfig(
+                        system_instruction=config.SYSTEM_PROMPT,
+                        temperature=0.7,
+                    ),
+                )
+
+                response = self._with_retry(
+                    lambda: chat.send_message(message=user_message),
+                    f"Gemini ({model})",
+                )
+
+                text = getattr(response, "text", None)
+                if not text:
+                    raise RuntimeError("Gemini retornou uma resposta vazia")
+
+                if model != config.GEMINI_MODEL:
+                    print(f"[Aviso] Gemini principal indisponível. Usando {model}.")
+                return text
+            except Exception as exc:
+                last_error = exc
+                continue
+
+        raise last_error  # pragma: no cover
 
     def _chat_groq(self, user_message: str, history: List[Dict[str, str]]) -> str:
         if not self._groq_client:
