@@ -7,7 +7,7 @@ from rich.panel import Panel
 from rich.text import Text
 
 from core.config import config
-from core.llm import LLM
+from core.llm import LLM, ProviderError
 from core.memory import Memory
 
 console = Console()
@@ -28,11 +28,14 @@ def print_help() -> None:
 
 - Digite normalmente → conversa com o Jarvis
 - `/clear` → limpa a memória da conversa
-- `/provider gemini` → usa Google Gemini
-- `/provider groq` → usa Groq
+- `/provider gemini` → usa Google Gemini exclusivamente
+- `/provider groq` → usa Groq exclusivamente
 - `/status` → mostra o status atual
 - `/help` → mostra esta ajuda
 - `/exit` ou `/quit` → encerra o programa
+
+**Importante:** o Jarvis não troca silenciosamente de provedor. Se o provedor
+selecionado falhar, ele mostra o erro para você e mantém o provedor escolhido.
 """
     console.print(Markdown(help_text))
 
@@ -106,6 +109,7 @@ def main() -> None:
                     "Provedores disponíveis: "
                     f"[cyan]{', '.join(llm.available_providers())}[/cyan]"
                 )
+                console.print(f"Modelo Groq configurado: [cyan]{config.GROQ_MODEL}[/cyan]")
                 continue
 
             history = memory.get_history()
@@ -126,6 +130,13 @@ def main() -> None:
             )
             console.print()
 
+        except ProviderError as exc:
+            console.print(
+                f"[bold red]Falha no provedor {exc.provider}:[/bold red] {exc.cause}"
+            )
+            console.print(
+                f"[dim]O Jarvis continua em '{llm.provider}'. Use /provider gemini ou /provider groq para trocar manualmente.[/dim]"
+            )
         except KeyboardInterrupt:
             console.print("\n[cyan]Até mais, senhor.[/cyan]")
             break
