@@ -1,10 +1,15 @@
+import random
+import time
 from typing import Dict, List
 
 from core.config import config
 
 
 class LLM:
-    """Camada unificada para Gemini e Groq, com fallback automático."""
+    """Camada unificada para Gemini e Groq, com retry e fallback automático."""
+
+    MAX_RETRIES = 3
+    RETRYABLE_STATUS_CODES = (408, 429, 500, 502, 503, 504)
 
     def __init__(self):
         self.provider = config.DEFAULT_PROVIDER
@@ -63,6 +68,49 @@ class LLM:
             lines.append(f"{role}: {message['content']}")
         return "\n".join(lines)
 
+    @classmethod
+    def _is_retryable_error(cls, exc: Exception) -> bool:
+        """Identifica erros temporários que justificam uma nova tentativa."""
+        status_code = getattr(exc, "status_code", None)
+        if status_code in cls.RETRYABLE_STATUS_CODES:
+            return True
+
+        text = str(exc).upper()
+        return any(
+            f"{code}" in text
+            or phrase in text
+            for code, phrase in [
+                (503, "UNAVAILABLE"),
+                (429, "RESOURCE_EXHAUSTED"),
+                (500, "INTERNAL"),
+                (502, "BAD GATEWAY"),
+                (504, "DEADLINE_EXCEEDED"),
+                (408, "TIMEOUT"),
+            ]
+        )
+
+    def _with_retry(self, operation, provider: str) -> str:
+        """Executa uma chamada com espera exponencial para falhas temporárias."""
+        last_error = None
+
+        for attempt in range(self.MAX_RETRIES + 1):
+            try:
+                return operation()
+            except Exception as exc:
+                last_error = exc
+
+                if attempt >= self.MAX_RETRIES or not self._is_retryable_error(exc):
+                    raise
+
+                delay = (2**attempt) + random.uniform(0, 0.5)
+                print(
+                    f"[Aviso] {provider} temporariamente indisponível. "
+                    f"Nova tentativa em {delay:.1f}s..."
+                )
+                time.sleep(delay)
+
+        raise last_error  # pragma: no cover
+
     def chat(self, user_message: str, history: List[Dict[str, str]]) -> str:
         if not user_message.strip():
             return "Digite uma mensagem para o Jarvis."
@@ -81,9 +129,13 @@ class LLM:
         for provider in order:
             try:
                 if provider == "gemini":
-                    response = self._chat_gemini(user_message, history)
+                    response = self._with_retry(
+                        lambda: self._chat_gemini(user_message, history), "Gemini"
+                    )
                 else:
-                    response = self._chat_groq(user_message, history)
+                    response = self._with_retry(
+                        lambda: self._chat_groq(user_message, history), "Groq"
+                    )
 
                 self.provider = provider
                 return response.strip() or "O modelo não retornou texto."
@@ -91,7 +143,10 @@ class LLM:
                 last_error = exc
                 continue
 
-        return f"Não consegui obter uma resposta do provedor de IA: {last_error}"
+        return (
+            "Não consegui obter uma resposta dos provedores de IA. "
+            f"Último erro: {last_error}"
+        )
 
     def _chat_gemini(self, user_message: str, history: List[Dict[str, str]]) -> str:
         if not self._gemini_client:
