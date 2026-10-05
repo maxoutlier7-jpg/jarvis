@@ -5,8 +5,17 @@ from typing import Dict, List
 from core.config import config
 
 
+class ProviderError(RuntimeError):
+    """Erro de um provedor específico, sem fallback silencioso para outro provedor."""
+
+    def __init__(self, provider: str, cause: Exception):
+        self.provider = provider
+        self.cause = cause
+        super().__init__(f"{provider}: {cause}")
+
+
 class LLM:
-    """Camada unificada para Gemini e Groq, com chat, retry e fallback automático."""
+    """Camada unificada para Gemini e Groq, com roteamento estrito."""
 
     MAX_RETRIES = 3
     RETRYABLE_STATUS_CODES = (408, 429, 500, 502, 503, 504)
@@ -26,7 +35,6 @@ class LLM:
         if config.GEMINI_API_KEY:
             try:
                 from google import genai
-
                 self._gemini_client = genai.Client(api_key=config.GEMINI_API_KEY)
             except Exception as exc:
                 print(f"[Aviso] Gemini não pôde ser inicializado: {exc}")
@@ -34,7 +42,6 @@ class LLM:
         if config.GROQ_API_KEY:
             try:
                 from groq import Groq
-
                 self._groq_client = Groq(api_key=config.GROQ_API_KEY)
             except Exception as exc:
                 print(f"[Aviso] Groq não pôde ser inicializado: {exc}")
@@ -58,7 +65,6 @@ class LLM:
 
     @staticmethod
     def _gemini_history(history: List[Dict[str, str]]):
-        """Converte a memória interna do Jarvis para o formato de histórico do Chat."""
         from google.genai import types
 
         result = []
@@ -74,86 +80,88 @@ class LLM:
 
     @classmethod
     def _is_retryable_error(cls, exc: Exception) -> bool:
-        """Identifica erros temporários que justificam uma nova tentativa."""
         status_code = getattr(exc, "status_code", None)
         if status_code in cls.RETRYABLE_STATUS_CODES:
             return True
 
         text = str(exc).upper()
         return any(
-            f"{code}" in text or phrase in text
-            for code, phrase in [
-                (503, "UNAVAILABLE"),
-                (429, "RESOURCE_EXHAUSTED"),
-                (500, "INTERNAL"),
-                (502, "BAD GATEWAY"),
-                (504, "DEADLINE_EXCEEDED"),
-                (408, "TIMEOUT"),
-            ]
+            marker in text
+            for marker in (
+                "503",
+                "UNAVAILABLE",
+                "429",
+                "RESOURCE_EXHAUSTED",
+                "500",
+                "INTERNAL",
+                "502",
+                "BAD GATEWAY",
+                "504",
+                "DEADLINE_EXCEEDED",
+                "408",
+                "TIMEOUT",
+            )
         )
 
-    def _with_retry(self, operation, provider: str) -> str:
-        """Executa uma chamada com espera exponencial para falhas temporárias."""
+    def _with_retry(self, operation, provider: str):
         last_error = None
-
         for attempt in range(self.MAX_RETRIES + 1):
             try:
                 return operation()
             except Exception as exc:
                 last_error = exc
-
                 if attempt >= self.MAX_RETRIES or not self._is_retryable_error(exc):
                     raise
-
                 delay = (2**attempt) + random.uniform(0, 0.5)
                 print(
                     f"[Aviso] {provider} temporariamente indisponível. "
                     f"Nova tentativa em {delay:.1f}s..."
                 )
                 time.sleep(delay)
-
         raise last_error  # pragma: no cover
 
     def chat(self, user_message: str, history: List[Dict[str, str]]) -> str:
+        """Conversa usando EXCLUSIVAMENTE o provedor selecionado pelo usuário.
+
+        Isso impede que uma falha do Groq caia silenciosamente no Gemini, ou vice-versa.
+        O provedor só muda quando o usuário usa /provider ou quando o programa inicia
+        e precisa escolher o primeiro provedor realmente disponível.
+        """
         if not user_message.strip():
             return "Digite uma mensagem para o Jarvis."
 
         providers = self.available_providers()
         if not providers:
-            return (
-                "Nenhuma API está configurada. Coloque GEMINI_API_KEY ou "
-                "GROQ_API_KEY no arquivo .env e tente novamente."
+            raise ProviderError(
+                "nenhum",
+                RuntimeError(
+                    "Nenhuma API está configurada. Configure GEMINI_API_KEY ou GROQ_API_KEY no .env."
+                ),
             )
 
-        order = [self.provider] + [p for p in providers if p != self.provider]
-        last_error = None
+        if self.provider not in providers:
+            raise ProviderError(
+                self.provider,
+                RuntimeError(
+                    f"O provedor selecionado ({self.provider}) não está disponível. "
+                    f"Disponíveis: {', '.join(providers)}"
+                ),
+            )
 
-        for provider in order:
-            try:
-                if provider == "gemini":
-                    response = self._chat_gemini(user_message, history)
-                else:
-                    response = self._with_retry(
-                        lambda: self._chat_groq(user_message, history), "Groq"
-                    )
-
-                self.provider = provider
-                return response.strip() or "O modelo não retornou texto."
-            except Exception as exc:
-                last_error = exc
-                continue
-
-        return (
-            "Não consegui obter uma resposta dos provedores de IA. "
-            f"Último erro: {last_error}"
-        )
+        try:
+            if self.provider == "gemini":
+                return self._chat_gemini(user_message, history).strip()
+            return self._with_retry(
+                lambda: self._chat_groq(user_message, history), "Groq"
+            ).strip()
+        except Exception as exc:
+            raise ProviderError(self.provider, exc) from exc
 
     def _chat_gemini(self, user_message: str, history: List[Dict[str, str]]) -> str:
         if not self._gemini_client:
             raise RuntimeError("Cliente Gemini não está disponível")
 
         from google.genai import types
-
         last_error = None
 
         for model in config.GEMINI_MODELS:
@@ -166,16 +174,13 @@ class LLM:
                         temperature=0.7,
                     ),
                 )
-
                 response = self._with_retry(
                     lambda: chat.send_message(message=user_message),
                     f"Gemini ({model})",
                 )
-
                 text = getattr(response, "text", None)
                 if not text:
                     raise RuntimeError("Gemini retornou uma resposta vazia")
-
                 if model != config.GEMINI_MODEL:
                     print(f"[Aviso] Gemini principal indisponível. Usando {model}.")
                 return text
@@ -199,6 +204,9 @@ class LLM:
             temperature=0.7,
             max_tokens=4096,
         )
+
+        if not completion.choices:
+            raise RuntimeError("Groq não retornou escolhas na resposta")
 
         text = completion.choices[0].message.content
         if not text:
