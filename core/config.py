@@ -31,7 +31,7 @@ class Config:
     )
     GEMINI_MODELS = list(dict.fromkeys([GEMINI_MODEL, *GEMINI_FALLBACK_MODELS]))
 
-    GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile").strip()
+    GROQ_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-20b").strip()
     MEMORY_MAX_MESSAGES = max(2, _int_env("MEMORY_MAX_MESSAGES", 30))
 
     SYSTEM_PROMPT = """Você é o Jarvis, um assistente de IA pessoal extremamente inteligente, prestativo e confiável.
