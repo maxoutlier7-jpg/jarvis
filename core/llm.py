@@ -6,7 +6,7 @@ from core.config import config
 
 
 class LLM:
-    """Camada unificada para Gemini e Groq, com retry e fallback automático."""
+    """Camada unificada para Gemini e Groq, com chat, retry e fallback automático."""
 
     MAX_RETRIES = 3
     RETRYABLE_STATUS_CODES = (408, 429, 500, 502, 503, 504)
@@ -17,7 +17,6 @@ class LLM:
         self._groq_client = None
         self._setup()
 
-        # Se o provedor configurado não estiver disponível, usa outro automaticamente.
         if self.provider not in self.available_providers():
             available = self.available_providers()
             if available:
@@ -58,15 +57,20 @@ class LLM:
         return True
 
     @staticmethod
-    def _history_text(history: List[Dict[str, str]]) -> str:
-        if not history:
-            return ""
+    def _gemini_history(history: List[Dict[str, str]]):
+        """Converte a memória interna do Jarvis para o formato de histórico do Chat."""
+        from google.genai import types
 
-        lines = ["Histórico recente da conversa:"]
+        result = []
         for message in history:
-            role = "Usuário" if message["role"] == "user" else "Jarvis"
-            lines.append(f"{role}: {message['content']}")
-        return "\n".join(lines)
+            role = "user" if message["role"] == "user" else "model"
+            result.append(
+                types.Content(
+                    role=role,
+                    parts=[types.Part.from_text(text=message["content"])],
+                )
+            )
+        return result
 
     @classmethod
     def _is_retryable_error(cls, exc: Exception) -> bool:
@@ -77,8 +81,7 @@ class LLM:
 
         text = str(exc).upper()
         return any(
-            f"{code}" in text
-            or phrase in text
+            f"{code}" in text or phrase in text
             for code, phrase in [
                 (503, "UNAVAILABLE"),
                 (429, "RESOURCE_EXHAUSTED"),
@@ -122,7 +125,6 @@ class LLM:
                 "GROQ_API_KEY no arquivo .env e tente novamente."
             )
 
-        # Tenta primeiro o provedor selecionado e depois o outro como fallback.
         order = [self.provider] + [p for p in providers if p != self.provider]
         last_error = None
 
@@ -152,22 +154,18 @@ class LLM:
         if not self._gemini_client:
             raise RuntimeError("Cliente Gemini não está disponível")
 
-        history_text = self._history_text(history)
-        prompt = user_message
-        if history_text:
-            prompt = f"{history_text}\n\nMensagem atual do usuário:\n{user_message}"
-
         from google.genai import types
 
-        response = self._gemini_client.models.generate_content(
+        chat = self._gemini_client.chats.create(
             model=config.GEMINI_MODEL,
-            contents=prompt,
+            history=self._gemini_history(history),
             config=types.GenerateContentConfig(
                 system_instruction=config.SYSTEM_PROMPT,
                 temperature=0.7,
             ),
         )
 
+        response = chat.send_message(message=user_message)
         text = getattr(response, "text", None)
         if not text:
             raise RuntimeError("Gemini retornou uma resposta vazia")
