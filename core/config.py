@@ -11,6 +11,11 @@ def _int_env(name: str, default: int) -> int:
         return default
 
 
+def _list_env(name: str, default: str) -> list[str]:
+    value = os.getenv(name, default)
+    return [item.strip() for item in value.split(",") if item.strip()]
+
+
 class Config:
     GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
     GROQ_API_KEY = os.getenv("GROQ_API_KEY", "").strip()
@@ -20,6 +25,12 @@ class Config:
         DEFAULT_PROVIDER = "gemini"
 
     GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.8-flash").strip()
+    GEMINI_FALLBACK_MODELS = _list_env(
+        "GEMINI_FALLBACK_MODELS",
+        "gemini-3.5-flash,gemini-3.1-flash-lite",
+    )
+    GEMINI_MODELS = list(dict.fromkeys([GEMINI_MODEL, *GEMINI_FALLBACK_MODELS]))
+
     GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile").strip()
     MEMORY_MAX_MESSAGES = max(2, _int_env("MEMORY_MAX_MESSAGES", 30))
 
